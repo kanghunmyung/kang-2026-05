@@ -1,0 +1,117 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+
+st.set_page_config(page_title="주식 티커 분석기", layout="wide")
+
+st.title("📈 주식 티커 분석기")
+st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보를 확인할 수 있습니다.")
+
+
+def load_data(ticker: str, period: str):
+    stock = yf.Ticker(ticker)
+    hist = stock.history(period=period)
+    info = stock.info
+    return hist, info
+
+
+st.sidebar.header("분석 설정")
+ticker = st.sidebar.text_input("주식 티커", value="AAPL").strip().upper()
+period = st.sidebar.selectbox(
+    "조회 기간",
+    ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+    index=3,
+)
+show_ma20 = st.sidebar.checkbox("20일 이동평균선", value=True)
+show_ma60 = st.sidebar.checkbox("60일 이동평균선", value=True)
+
+if ticker:
+    try:
+        hist, info = load_data(ticker, period)
+
+        if hist.empty:
+            st.error("데이터를 불러올 수 없습니다. 티커를 다시 확인해주세요.")
+        else:
+            hist = hist.copy()
+            hist["MA20"] = hist["Close"].rolling(20).mean()
+            hist["MA60"] = hist["Close"].rolling(60).mean()
+
+            current_price = hist["Close"].iloc[-1]
+            start_price = hist["Close"].iloc[0]
+            returns = ((current_price - start_price) / start_price) * 100
+            high_price = hist["High"].max()
+            low_price = hist["Low"].min()
+            avg_volume = hist["Volume"].mean()
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("현재가", f"${current_price:,.2f}")
+            col2.metric("기간 수익률", f"{returns:,.2f}%")
+            col3.metric("기간 최고가", f"${high_price:,.2f}")
+            col4.metric("평균 거래량", f"{avg_volume:,.0f}")
+
+            st.subheader("주가 차트")
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=hist.index,
+                    y=hist["Close"],
+                    mode="lines",
+                    name="종가",
+                )
+            )
+
+            if show_ma20:
+                fig.add_trace(
+                    go.Scatter(
+                        x=hist.index,
+                        y=hist["MA20"],
+                        mode="lines",
+                        name="MA20",
+                    )
+                )
+
+            if show_ma60:
+                fig.add_trace(
+                    go.Scatter(
+                        x=hist.index,
+                        y=hist["MA60"],
+                        mode="lines",
+                        name="MA60",
+                    )
+                )
+
+            fig.update_layout(
+                height=500,
+                xaxis_title="날짜",
+                yaxis_title="가격 (USD)",
+                legend_title="범례",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.subheader("거래량")
+            st.bar_chart(hist["Volume"])
+
+            st.subheader("기업 정보")
+            info_col1, info_col2 = st.columns(2)
+            with info_col1:
+                st.write(f"**회사명:** {info.get('longName', 'N/A')}")
+                st.write(f"**섹터:** {info.get('sector', 'N/A')}")
+                st.write(f"**산업:** {info.get('industry', 'N/A')}")
+            with info_col2:
+                st.write(f"**시가총액:** {info.get('marketCap', 'N/A')}")
+                st.write(f"**52주 최고가:** {info.get('fiftyTwoWeekHigh', 'N/A')}")
+                st.write(f"**52주 최저가:** {info.get('fiftyTwoWeekLow', 'N/A')}")
+
+            summary = info.get("longBusinessSummary")
+            if summary:
+                st.subheader("기업 소개")
+                st.write(summary)
+
+            st.subheader("최근 데이터")
+            st.dataframe(hist.tail(10))
+
+    except Exception as e:
+        st.error(f"오류가 발생했습니다: {e}")
+else:
+    st.info("왼쪽 사이드바에서 티커를 입력해주세요.")
