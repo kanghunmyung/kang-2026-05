@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="주식 티커 분석기", layout="wide")
 
 st.title("📈 주식 티커 분석기")
-st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보, 최근 실적 발표 데이터를 확인할 수 있습니다.")
+st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보, 최근 분기 실적 데이터를 확인할 수 있습니다.")
 
 KOREAN_TICKER_MAP = {
     "삼성전자": "005930.KS",
@@ -46,8 +46,8 @@ def load_data(ticker: str, period: str):
     stock = yf.Ticker(ticker)
     hist = stock.history(period=period)
     info = stock.info
-    earnings = stock.quarterly_earnings
-    return hist, info, earnings
+    financials = stock.quarterly_financials
+    return hist, info, financials
 
 
 def format_number(value):
@@ -95,7 +95,7 @@ ticker = normalize_ticker(user_input)
 
 if user_input:
     try:
-        hist, info, earnings = load_data(ticker, period)
+        hist, info, financials = load_data(ticker, period)
 
         if hist.empty:
             st.error("데이터를 불러올 수 없습니다. 티커 또는 종목명을 다시 확인해주세요.")
@@ -177,13 +177,12 @@ if user_input:
                 st.subheader("기업 소개")
                 st.write(summary)
 
-            st.subheader("최근 실적 발표 데이터")
-            if isinstance(earnings, pd.DataFrame) and not earnings.empty:
-                latest_earnings = earnings.tail(1).copy()
-                latest_earnings.index = latest_earnings.index.astype(str)
-                st.dataframe(latest_earnings)
+            st.subheader("최근 분기 실적 데이터")
+            if isinstance(financials, pd.DataFrame) and not financials.empty:
+                latest_financials = financials.iloc[:, :1].copy()
+                st.dataframe(latest_financials)
             else:
-                st.info("최근 실적 발표 데이터를 찾을 수 없습니다.")
+                st.info("최근 분기 실적 데이터를 찾을 수 없습니다.")
 
     except Exception as e:
         st.error(f"오류가 발생했습니다: {e}")
