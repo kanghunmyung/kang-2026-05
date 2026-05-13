@@ -8,6 +8,39 @@ st.set_page_config(page_title="주식 티커 분석기", layout="wide")
 st.title("📈 주식 티커 분석기")
 st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보를 확인할 수 있습니다.")
 
+KOREAN_TICKER_MAP = {
+    "삼성전자": "005930.KS",
+    "sk하이닉스": "000660.KS",
+    "하이닉스": "000660.KS",
+    "네이버": "035420.KS",
+    "naver": "035420.KS",
+    "카카오": "035720.KS",
+    "lg에너지솔루션": "373220.KS",
+    "삼성바이오로직스": "207940.KS",
+    "현대차": "005380.KS",
+    "기아": "000270.KS",
+    "셀트리온": "068270.KS",
+    "포스코홀딩스": "005490.KS",
+    "에코프로비엠": "247540.KQ",
+    "에코프로": "086520.KQ",
+}
+
+
+def normalize_ticker(user_input: str) -> str:
+    text = user_input.strip()
+    lower_text = text.lower()
+
+    if lower_text in KOREAN_TICKER_MAP:
+        return KOREAN_TICKER_MAP[lower_text]
+
+    if text in KOREAN_TICKER_MAP:
+        return KOREAN_TICKER_MAP[text]
+
+    if text.isdigit() and len(text) == 6:
+        return f"{text}.KS"
+
+    return text.upper()
+
 
 def load_data(ticker: str, period: str):
     stock = yf.Ticker(ticker)
@@ -17,7 +50,11 @@ def load_data(ticker: str, period: str):
 
 
 st.sidebar.header("분석 설정")
-ticker = st.sidebar.text_input("주식 티커", value="AAPL").strip().upper()
+user_input = st.sidebar.text_input(
+    "주식 티커 또는 종목명",
+    value="AAPL",
+    help="예: AAPL, TSLA, 005930.KS, 삼성전자, sk하이닉스",
+)
 period = st.sidebar.selectbox(
     "조회 기간",
     ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
@@ -26,12 +63,14 @@ period = st.sidebar.selectbox(
 show_ma20 = st.sidebar.checkbox("20일 이동평균선", value=True)
 show_ma60 = st.sidebar.checkbox("60일 이동평균선", value=True)
 
-if ticker:
+ticker = normalize_ticker(user_input)
+
+if user_input:
     try:
         hist, info = load_data(ticker, period)
 
         if hist.empty:
-            st.error("데이터를 불러올 수 없습니다. 티커를 다시 확인해주세요.")
+            st.error("데이터를 불러올 수 없습니다. 티커 또는 종목명을 다시 확인해주세요.")
         else:
             hist = hist.copy()
             hist["MA20"] = hist["Close"].rolling(20).mean()
@@ -43,6 +82,8 @@ if ticker:
             high_price = hist["High"].max()
             low_price = hist["Low"].min()
             avg_volume = hist["Volume"].mean()
+
+            st.info(f"입력값: **{user_input}** → 조회 티커: **{ticker}**")
 
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("현재가", f"${current_price:,.2f}")
@@ -84,7 +125,7 @@ if ticker:
             fig.update_layout(
                 height=500,
                 xaxis_title="날짜",
-                yaxis_title="가격 (USD)",
+                yaxis_title="가격",
                 legend_title="범례",
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -114,4 +155,4 @@ if ticker:
     except Exception as e:
         st.error(f"오류가 발생했습니다: {e}")
 else:
-    st.info("왼쪽 사이드바에서 티커를 입력해주세요.")
+    st.info("왼쪽 사이드바에서 티커 또는 종목명을 입력해주세요.")
