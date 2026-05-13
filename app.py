@@ -1,18 +1,12 @@
-import os
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
 st.set_page_config(page_title="주식 티커 분석기", layout="wide")
 
 st.title("📈 주식 티커 분석기")
-st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보, AI 요약을 확인할 수 있습니다.")
+st.caption("티커를 입력하면 가격 흐름, 이동평균선, 수익률, 거래량, 기업 정보를 확인할 수 있습니다.")
 
 KOREAN_TICKER_MAP = {
     "삼성전자": "005930.KS",
@@ -30,18 +24,6 @@ KOREAN_TICKER_MAP = {
     "에코프로비엠": "247540.KQ",
     "에코프로": "086520.KQ",
 }
-
-
-def get_google_api_key():
-    try:
-        return (
-            os.getenv("GOOGLE_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or st.secrets.get("GOOGLE_API_KEY")
-            or st.secrets.get("GEMINI_API_KEY")
-        )
-    except Exception:
-        return os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 
 def normalize_ticker(user_input: str) -> str:
@@ -76,58 +58,22 @@ def format_number(value):
         return str(value)
 
 
-def get_ai_analysis(ticker: str, user_input: str, info: dict, current_price, returns, high_price, low_price, avg_volume):
-    api_key = get_google_api_key()
+def is_korean_stock(ticker: str) -> bool:
+    return ticker.endswith(".KS") or ticker.endswith(".KQ")
 
-    if not api_key:
-        return "⚠️ GOOGLE_API_KEY 또는 GEMINI_API_KEY가 설정되지 않아 AI 분석을 표시할 수 없습니다."
 
-    if genai is None:
-        return "⚠️ google-generativeai 패키지가 설치되지 않았습니다. `pip install google-generativeai` 후 다시 실행해주세요."
+def get_currency_symbol(ticker: str) -> str:
+    return "₩" if is_korean_stock(ticker) else "$"
 
-    company_name = info.get("longName", "N/A")
-    sector = info.get("sector", "N/A")
-    industry = info.get("industry", "N/A")
-    summary = info.get("longBusinessSummary", "N/A")
 
-    prompt = f"""
-다음 주식 정보를 바탕으로 한국어로 간단하고 이해하기 쉽게 요약해주세요.
-
-입력 종목명: {user_input}
-조회 티커: {ticker}
-회사명: {company_name}
-섹터: {sector}
-산업: {industry}
-현재가: {current_price:.2f}
-기간 수익률: {returns:.2f}%
-기간 최고가: {high_price:.2f}
-기간 최저가: {low_price:.2f}
-평균 거래량: {avg_volume:.0f}
-
-기업 소개:
-{summary}
-
-아래 형식으로 정리해주세요:
-1. 기업 한줄 소개
-2. 최근 흐름 요약
-3. 투자 시 참고할 포인트 3가지
-
-주의:
-- 투자 권유처럼 단정하지 말 것
-- 과장 없이 설명할 것
-- 한국어로 작성할 것
-"""
-
+def format_price(value, ticker: str) -> str:
+    symbol = get_currency_symbol(ticker)
+    if value in [None, "N/A"]:
+        return "N/A"
     try:
-        genai.configure(api_key=api_key)
-        try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
-        except Exception:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"⚠️ AI 분석 생성 중 오류가 발생했습니다: {e}"
+        return f"{symbol}{value:,.2f}"
+    except Exception:
+        return f"{symbol}{value}"
 
 
 st.sidebar.header("분석 설정")
@@ -143,13 +89,6 @@ period = st.sidebar.selectbox(
 )
 show_ma20 = st.sidebar.checkbox("20일 이동평균선", value=True)
 show_ma60 = st.sidebar.checkbox("60일 이동평균선", value=True)
-use_ai_summary = st.sidebar.checkbox("Gemini AI 요약 보기", value=True)
-
-api_key = get_google_api_key()
-if api_key:
-    st.sidebar.success("Google/Gemini API 키 설정 완료")
-else:
-    st.sidebar.warning("Google/Gemini API 키 없음")
 
 ticker = normalize_ticker(user_input)
 
@@ -174,9 +113,9 @@ if user_input:
             st.info(f"입력값: **{user_input}** → 조회 티커: **{ticker}**")
 
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("현재가", f"${current_price:,.2f}")
+            col1.metric("현재가", format_price(current_price, ticker))
             col2.metric("기간 수익률", f"{returns:,.2f}%")
-            col3.metric("기간 최고가", f"${high_price:,.2f}")
+            col3.metric("기간 최고가", format_price(high_price, ticker))
             col4.metric("평균 거래량", f"{avg_volume:,.0f}")
 
             st.subheader("주가 차트")
@@ -229,28 +168,13 @@ if user_input:
                 st.write(f"**산업:** {info.get('industry', 'N/A')}")
             with info_col2:
                 st.write(f"**시가총액:** {format_number(info.get('marketCap', 'N/A'))}")
-                st.write(f"**52주 최고가:** {format_number(info.get('fiftyTwoWeekHigh', 'N/A'))}")
-                st.write(f"**52주 최저가:** {format_number(info.get('fiftyTwoWeekLow', 'N/A'))}")
+                st.write(f"**52주 최고가:** {format_price(info.get('fiftyTwoWeekHigh', 'N/A'), ticker)}")
+                st.write(f"**52주 최저가:** {format_price(info.get('fiftyTwoWeekLow', 'N/A'), ticker)}")
 
             summary = info.get("longBusinessSummary")
             if summary:
                 st.subheader("기업 소개")
                 st.write(summary)
-
-            if use_ai_summary:
-                st.subheader("🤖 Gemini AI 요약")
-                with st.spinner("AI가 종목 요약을 생성하는 중입니다..."):
-                    ai_result = get_ai_analysis(
-                        ticker=ticker,
-                        user_input=user_input,
-                        info=info,
-                        current_price=current_price,
-                        returns=returns,
-                        high_price=high_price,
-                        low_price=low_price,
-                        avg_volume=avg_volume,
-                    )
-                st.write(ai_result)
 
             st.subheader("최근 데이터")
             st.dataframe(hist.tail(10))
