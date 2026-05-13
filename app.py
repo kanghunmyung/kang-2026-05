@@ -120,7 +120,10 @@ def get_ai_analysis(ticker: str, user_input: str, info: dict, current_price, ret
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")
+        except Exception:
+            model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
